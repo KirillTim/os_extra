@@ -20,15 +20,13 @@ int buf_t::read_all(int fd) {
     int len = 0;
     for (;;) {
         ssize_t count = read(fd, buf, BUF_SIZE);
-        if (count < 0)
-        {
+        if (count < 0) {
             if (errno != EAGAIN)
                 return -1;
             return len;
         }
-        else if (count == 0)
-        {
-            return len;
+        else if (count == 0) {
+            return 0;
         }
         char* data_new = (char*)malloc(size+count);
         memcpy(data, data_new, size);
