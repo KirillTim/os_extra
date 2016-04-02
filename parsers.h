@@ -47,6 +47,7 @@ int parse_args(char *args, size_t len, program& prog) {
     return 1;
 }
 
+//TODO: fix parsing and pass all test
 int parse_command(char* args, size_t len, vector<program>& progs) {
     int pos = 0;
     for (pos; pos < len; pos++)
@@ -57,6 +58,7 @@ int parse_command(char* args, size_t len, vector<program>& progs) {
     int st = 0;
     for (int i = 0; i < pos; i++) {
         if (args[i] == '|') {
+            st = i + 1;
             program cur;
             if (parse_args(args+st, (size_t)i-st, cur) <= 0)
                 return -1; //can't parse args
