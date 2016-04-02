@@ -28,11 +28,18 @@ int buf_t::read_all(int fd) {
         else if (count == 0) {
             return 0;
         }
-        char* data_new = (char*)malloc(size+count);
-        memcpy(data, data_new, size);
-        memcpy(data+size, buf, (size_t)count);
-        size += count;
-        free(data);
-        data = data_new;
+        len += count;
+        if (data == NULL) {
+            data = (char*)malloc((size_t)count);
+            memcpy(data, buf, (size_t)count);
+            size = (size_t)count;
+        } else {
+            char *data_new = (char *) malloc(size + count);
+            memmove(data_new, data, size);
+            memmove(data_new+size, buf, (size_t) count);
+            size += count;
+            free(data);
+            data = data_new;
+        }
     }
 }
