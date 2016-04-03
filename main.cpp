@@ -75,7 +75,7 @@ int start_prog(vector<execargs_t> prog, int fd) {
     } else if (pid) {
         cerr<<"chld: "<<pid<<"\n";
         close(fd);//only child handle descriptor now
-        //ignore child, they will finish somehow
+        //ignore children, they will finish somehow
         return 0;
     } else {
         dup2(fd, STDIN_FILENO);
@@ -86,6 +86,11 @@ int start_prog(vector<execargs_t> prog, int fd) {
         close(STDOUT_FILENO);
         exit(res);
     }
+}
+
+void remove_socket(int efd, struct epoll_event* event, int fd) {
+    epoll_ctl(efd, EPOLL_CTL_DEL, fd, event);
+    buffers.erase(buffers.find(fd));
 }
 
 int main(int argc, char **argv) {
@@ -104,50 +109,19 @@ int main(int argc, char **argv) {
 
     struct epoll_event event;
     struct epoll_event *events;
-    size_t events_size = 1, events_new_size = 1;
+    size_t events_size = 1;
 
     event.data.fd = server;
     event.events = EPOLLIN | EPOLLET;
     if (epoll_ctl(efd, EPOLL_CTL_ADD, server, &event) < 0)
         return 4;
 
-    /* Buffer where events are returned */
     events = (epoll_event *) calloc(events_size, sizeof(event));
 
-    /*while (1) {
-        int n = epoll_wait(efd, events, (int) events_size, -1);
-        for (int i = 0; i < n; i++) {
-            int cur_fd = events[i].data.fd;
-            if (server == cur_fd) {
-                epoll_ctl(efd, EPOLL_CTL_DEL, cur_fd, &events[i]);
-                int res = accept(server, 0, 0);
-                //make_socket_non_blocking(res);
-                cerr<<"connected: "<<res<<"\n";
-                dup2(res, STDIN_FILENO);
-                dup2(res, STDOUT_FILENO);
-                char* p1[3];
-                p1[0] = (char*)"cat";
-                p1[1] = (char*)"/proc/cpuinfo";
-                p1[2] = 0;
-                char* p2[3];
-                p2[0] = (char*)"grep";
-                p2[1] = (char*)"model name";
-                p2[2] = 0;
-                char* p3[4];
-                p3[0] = (char*)"head";
-                p3[1] = (char*)"-n";
-                p3[2] = (char*)"1";
-                p3[3] = 0;
-                vector<execargs_t > v({p1,p2,p3});
-                run_piped(v, -1);
-                return 0;
-            }
-        }
-    }*/
-
     while (1) {
-        if (events_new_size != events_size) {
-            events_size = events_new_size;
+        if (events_size != buffers.size()+1) {
+            events_size = buffers.size()+1;
+            free(events);
             events = (epoll_event *) calloc(events_size, sizeof(event));
         }
         int n = epoll_wait(efd, events, (int) events_size, -1);
@@ -156,6 +130,7 @@ int main(int argc, char **argv) {
             if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)
                 || (events[i].events & EPOLLRDHUP)) {
                 cerr << "error on socket: " << cur_fd << "\n";
+                remove_socket(efd, &events[i], cur_fd);
                 close(cur_fd);
                 continue;
             }
@@ -164,8 +139,6 @@ int main(int argc, char **argv) {
                 res = add_client(efd, res);
                 if (res < 0)
                     return -res;
-                else
-                    events_new_size++;
                 continue;
             }
             else {
@@ -175,6 +148,7 @@ int main(int argc, char **argv) {
                     ssize_t count = read(cur_fd, buf, 1);
                     if (count == 0) {
                         cerr << "on socket " << cur_fd << " close\n";
+                        remove_socket(efd, &events[i], cur_fd);
                         close(cur_fd);
                         break;
                     }
@@ -193,40 +167,16 @@ int main(int argc, char **argv) {
                 if (read_finished) {
                     cerr<<"command: "<<buffers.find(cur_fd)->second<<"\n";
                     vector<execargs_t> prog;
-                    int res = parse_command((char *) buffers.find(cur_fd)->second.c_str(),
-                                            buffers.find(cur_fd)->second.size(), prog);
-                    if (res == 1) {
-                        epoll_ctl(efd, EPOLL_CTL_DEL, cur_fd, &events[i]);
-                        buffers.erase(buffers.find(cur_fd));
-                        events_new_size--;
+                    string cmd = buffers.find(cur_fd)->second;
+                    if (parse_command((char *) cmd.c_str(), cmd.size(), prog) == 1) {
+                        remove_socket(efd, &events[i], cur_fd);
                         start_prog(prog, cur_fd);
                     } else {
                         cerr << "can't parse program on sock " << cur_fd << "\n";
+                        remove_socket(efd, &events[i], cur_fd);
                         close(cur_fd);
-                        epoll_ctl(efd, EPOLL_CTL_DEL, cur_fd, &events[i]);
-                        events_new_size--;
                     }
                 }
-
-                /*else {
-                    cerr << "on socket " << cur_fd << " read " << count << " bytes, buf: "<<buf->second.data<<"\n";
-                }*/
-                //read one byte at time, find "\n", direct the rest input to run_piped
-                //don't want to deal with rest of the line after '\n'
-
-                /*vector<program> programs;
-                int res = parse_command(buf->second.data, buf->second.size, programs);
-                if (res == 1) { //success
-                    cerr<<"command parsed, remove event\n";
-                    epoll_ctl(efd, EPOLL_CTL_DEL, cur_fd, &events[i]);
-                    events_new_size ++;
-                    run_piped(programs, cur_fd);
-                } else if (res == -1) { //error, close socket and remove
-                    cerr<<"bad string as command, close socket, remove event\n";
-                    close(cur_fd);
-                    epoll_ctl(efd, EPOLL_CTL_DEL, cur_fd, &events[i]);
-                    events_new_size ++;
-                }*/
             }
         }
     }
