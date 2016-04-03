@@ -3,26 +3,13 @@
 
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <signal.h>
 #include <stdlib.h>
-#include <string.h>
 #include <vector>
-using namespace std;
-typedef char** execargs_t;
 
-int exec(execargs_t args) {
-    /*cerr<<"exec()\n";
-    cerr<<"prog: "<<*args<<"\n";
-    int i = 0;
-    cerr<<"args:";
-    while(args[i] != 0) {
-        cerr<<"len: "<<strlen(args[i])<<", "<<(args[i])<<"\n";
-        i++;
-    }*/
-    return execvp(*args, args);
-}
+#include "helper.h"
+
+using namespace std;
 
 void cleanup(vector<pid_t>& pids, sigset_t& mask) {
     for(size_t i = 0; i < pids.size(); i++) {
@@ -35,7 +22,7 @@ void cleanup(vector<pid_t>& pids, sigset_t& mask) {
     sigprocmask(SIG_SETMASK, &mask, 0);
 }
 
-int run_piped(vector<execargs_t> args) {
+int run_piped(vector<execargs_t> args, int fd) {
     size_t n = args.size();
     int pipes[2*n - 2];
     for(size_t i = 1; i < n; i++) {
@@ -69,8 +56,12 @@ int run_piped(vector<execargs_t> args) {
         } else {
             if(i > 0)
                 dup2(pipes[i * 2 - 2], STDIN_FILENO);
+            else
+                dup2(fd, STDIN_FILENO);
             if(i < n - 1)
                 dup2(pipes[i * 2 + 1], STDOUT_FILENO);
+            else
+                dup2(fd, STDOUT_FILENO);
             sigprocmask(SIG_SETMASK, &orig_mask, 0);
             exit(exec(args[i]));
         }
