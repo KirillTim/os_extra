@@ -13,15 +13,15 @@
 
 using namespace std;
 
-void cleanup(vector<pid_t>& pids, sigset_t& mask) {
+void cleanup(vector<pid_t>& pids, sigset_t& mask, int fd) {
     for(size_t i = 0; i < pids.size(); i++) {
         if(pids[i]) {
             kill(pids[i], SIGKILL);
             waitpid(pids[i], 0, 0);
         }
     }
-
     sigprocmask(SIG_SETMASK, &mask, 0);
+    //close(fd);
 }
 
 int run_piped(vector<execargs_t> args, int fd) {
@@ -58,12 +58,12 @@ int run_piped(vector<execargs_t> args, int fd) {
         } else {
             if(i > 0)
                 dup2(pipes[i * 2 - 2], STDIN_FILENO);
-            else
-                dup2(fd, STDIN_FILENO);
+            /*else
+                dup2(fd, STDIN_FILENO);*/
             if(i < n - 1)
                 dup2(pipes[i * 2 + 1], STDOUT_FILENO);
-            else
-                dup2(fd, STDOUT_FILENO);
+            /*else
+                dup2(fd, STDOUT_FILENO);*/
             sigprocmask(SIG_SETMASK, &orig_mask, 0);
             exit(exec(args[i]));
         }
@@ -76,7 +76,7 @@ int run_piped(vector<execargs_t> args, int fd) {
     }
 
     if(fork_failed) {
-        cleanup(pids, orig_mask);
+        cleanup(pids, orig_mask, fd);
         return -1;
     }
 
@@ -97,13 +97,13 @@ int run_piped(vector<execargs_t> args, int fd) {
                 }
                 killed_procs++;
                 if(killed_procs == n) {
-                    cleanup(pids, orig_mask);
+                    cleanup(pids, orig_mask, fd);
                     return 0;
                 }
             }
         }
     }
-    cleanup(pids, orig_mask);
+    cleanup(pids, orig_mask, fd);
     return 0;
 }
 #endif //OS_EXTRA_HELPERS_H

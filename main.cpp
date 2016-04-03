@@ -20,6 +20,14 @@ int make_socket_non_blocking(int fd) {
     return fcntl(fd, F_SETFL, flags);
 }
 
+int make_socket_blocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1)
+        return -1;
+    flags &= ~O_NONBLOCK;
+    return fcntl(fd, F_SETFL, flags);
+}
+
 int make_server(char *port) {
     struct addrinfo *localhost;
     if (getaddrinfo("0.0.0.0", port, 0, &localhost)) {
@@ -60,14 +68,23 @@ int add_client(int efd, int client) {
 }
 
 int start_prog(vector<execargs_t> prog, int fd) {
+    make_socket_blocking(fd);
     int pid = fork();
     if (pid < 0) {
         return -1;
     } else if (pid) {
+        cerr<<"chld: "<<pid<<"\n";
+        close(fd);//only child handle descriptor now
         //ignore child, they will finish somehow
         return 0;
     } else {
-        exit(run_piped(prog, fd));
+        dup2(fd, STDIN_FILENO);
+        dup2(fd, STDOUT_FILENO);
+        int res = run_piped(prog, fd);
+        close(fd);
+        close(STDIN_FILENO);
+        close(STDOUT_FILENO);
+        exit(res);
     }
 }
 
@@ -96,6 +113,37 @@ int main(int argc, char **argv) {
 
     /* Buffer where events are returned */
     events = (epoll_event *) calloc(events_size, sizeof(event));
+
+    /*while (1) {
+        int n = epoll_wait(efd, events, (int) events_size, -1);
+        for (int i = 0; i < n; i++) {
+            int cur_fd = events[i].data.fd;
+            if (server == cur_fd) {
+                epoll_ctl(efd, EPOLL_CTL_DEL, cur_fd, &events[i]);
+                int res = accept(server, 0, 0);
+                //make_socket_non_blocking(res);
+                cerr<<"connected: "<<res<<"\n";
+                dup2(res, STDIN_FILENO);
+                dup2(res, STDOUT_FILENO);
+                char* p1[3];
+                p1[0] = (char*)"cat";
+                p1[1] = (char*)"/proc/cpuinfo";
+                p1[2] = 0;
+                char* p2[3];
+                p2[0] = (char*)"grep";
+                p2[1] = (char*)"model name";
+                p2[2] = 0;
+                char* p3[4];
+                p3[0] = (char*)"head";
+                p3[1] = (char*)"-n";
+                p3[2] = (char*)"1";
+                p3[3] = 0;
+                vector<execargs_t > v({p1,p2,p3});
+                run_piped(v, -1);
+                return 0;
+            }
+        }
+    }*/
 
     while (1) {
         if (events_new_size != events_size) {
@@ -149,6 +197,7 @@ int main(int argc, char **argv) {
                                             buffers.find(cur_fd)->second.size(), prog);
                     if (res == 1) {
                         epoll_ctl(efd, EPOLL_CTL_DEL, cur_fd, &events[i]);
+                        buffers.erase(buffers.find(cur_fd));
                         events_new_size--;
                         start_prog(prog, cur_fd);
                     } else {
