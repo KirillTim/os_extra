@@ -4,6 +4,7 @@
 #include <unordered_map>
 
 #include <sys/epoll.h>
+#include <sys/stat.h>
 #include <zconf.h>
 #include <vector>
 #include "parsers.h"
@@ -95,11 +96,49 @@ void remove_socket(int efd, struct epoll_event* event, int fd) {
     buffers.erase(buffers.find(fd));
 }
 
+void make_deamon() {
+    pid_t pid = fork();
+    if (pid < 0) {
+        exit(1);
+    }
+    if (pid > 0) {
+        FILE* file = fopen ("/tmp/netsh.pid","w");
+        if (file != NULL) {
+            char str[15];
+            sprintf(str, "%d", pid);
+            fputs (str, file);
+            fclose (file);
+        }
+        else {//can't create file - kill child
+            kill(pid, SIGKILL);
+        }
+        exit(1);
+    }
+
+    umask(0);
+
+    pid_t sid = setsid();
+    if (sid < 0) {
+        exit(1);
+    }
+
+    if ((chdir("/")) < 0) {
+        exit(1);
+    }
+
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s [port]\n", argv[0]);
         return 1;
     }
+
+    make_deamon();
+
     int server = make_server(argv[1]);
     if (server < 0)
         return 2;
