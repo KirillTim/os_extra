@@ -96,32 +96,6 @@ void remove_socket(int efd, struct epoll_event* event, int fd) {
 }
 
 int main(int argc, char **argv) {
-
-    /*string s;
-    while (1) {
-        std::getline (std::cin,s);
-        if (s == "exit")
-            return 0;
-        vector<execargs_t > prog;
-        int res = parse_command(s, prog);
-        if (res < 0)
-            cerr<<"-1";
-        else {
-            for (int i = 0; i < prog.size(); i++) {
-                cerr << "prog "<<i<<": " << *prog[i] << "\n";
-                int j = 0;
-                cerr << "args:";
-                while (prog[i][j] != 0) {
-                    cerr << "len: " << strlen(prog[i][j]) << ", " << (prog[i][j]) << "\n";
-                    j++;
-                }
-            }
-        }
-    }
-
-    return 0;*/
-
-
     if (argc != 2) {
         fprintf(stderr, "Usage: %s [port]\n", argv[0]);
         return 1;
