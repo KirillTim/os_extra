@@ -6,7 +6,6 @@
 #include <sys/epoll.h>
 #include <zconf.h>
 #include <vector>
-#include "bufio.h"
 #include "parsers.h"
 #include "run_piped.h"
 
@@ -67,20 +66,23 @@ int add_client(int efd, int client) {
     return client;
 }
 
-int start_prog(vector<execargs_t> prog, int fd) {
+int start_prog(vector<execargs_t>& prog, int fd) {
     make_socket_blocking(fd);
     int pid = fork();
     if (pid < 0) {
         return -1;
     } else if (pid) {
         cerr<<"chld: "<<pid<<"\n";
+        for (int i = 0; i < prog.size(); i++)
+            execargs_free(prog[i]);
+        prog.clear();
         close(fd);//only child handle descriptor now
         //ignore children, they will finish somehow
         return 0;
     } else {
         dup2(fd, STDIN_FILENO);
         dup2(fd, STDOUT_FILENO);
-        int res = run_piped(prog, fd);
+        int res = run_piped(prog);
         close(fd);
         close(STDIN_FILENO);
         close(STDOUT_FILENO);
@@ -180,12 +182,4 @@ int main(int argc, char **argv) {
             }
         }
     }
-
-    free(events);
-
-    close(server);
-
-    return EXIT_SUCCESS;
-
-    return 0;
 }
