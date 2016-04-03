@@ -16,7 +16,8 @@ bool isAlpha(char c) {
 int parse_command(string _line, vector<execargs_t> &progs) {
     if (_line.empty())
         return -1;
-    string line = _line + "|";
+    string line = _line ;//+ "|";
+    line[line.size()-1] = '|'; //change '\n' to '|'
     vector<string> prog;
     string temp;
     int i = 0;
