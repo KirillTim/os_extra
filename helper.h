@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <vector>
-
+#include <string>
 
 typedef char **execargs_t;
 
@@ -28,10 +28,14 @@ void execargs_free(execargs_t &args) {
     args = NULL;
 }
 
-execargs_t execargs_from_vector(std::vector<char *> args) {
-    execargs_t rv = (execargs_t) malloc(sizeof(char *) * args.size());
-    for (int i = 0; i < args.size(); i++)
-        rv[i] = args[i];
+execargs_t execargs_from_vector(std::vector<std::string> args) {
+    execargs_t rv = (execargs_t) malloc(sizeof(char *) * args.size()+1);
+    for (int i = 0; i < args.size(); i++) {
+        rv[i] = (char*)malloc(args[i].size()+1);
+        memcpy(rv[i], args[i].c_str(), args[i].size());
+        rv[i][args[i].size()] = 0;
+    }
+    rv[args.size()] = 0;
     return rv;
 }
 
