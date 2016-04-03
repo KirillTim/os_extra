@@ -53,7 +53,7 @@ int make_server(char *port) {
 unordered_map<int, string> buffers;
 
 int add_client(int efd, int client) {
-    cerr << "new client: " << client << "\n";
+    //cerr << "new client: " << client << "\n";
     if (client < 0)
         return -11;
     if (make_socket_non_blocking(client) < 0)
@@ -73,7 +73,7 @@ int start_prog(vector<execargs_t>& prog, int fd) {
     if (pid < 0) {
         return -1;
     } else if (pid) {
-        cerr<<"chld: "<<pid<<"\n";
+        //cerr<<"chld: "<<pid<<"\n";
         for (int i = 0; i < prog.size(); i++)
             execargs_free(prog[i]);
         prog.clear();
@@ -170,7 +170,7 @@ int main(int argc, char **argv) {
             int cur_fd = events[i].data.fd;
             if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)
                 || (events[i].events & EPOLLRDHUP)) {
-                cerr << "error on socket: " << cur_fd << "\n";
+                //cerr << "error on socket: " << cur_fd << "\n";
                 remove_socket(efd, &events[i], cur_fd);
                 close(cur_fd);
                 continue;
@@ -188,13 +188,13 @@ int main(int argc, char **argv) {
                 while (1) {
                     ssize_t count = read(cur_fd, buf, 1);
                     if (count == 0) {
-                        cerr << "on socket " << cur_fd << " close\n";
+                        //cerr << "on socket " << cur_fd << " close\n";
                         remove_socket(efd, &events[i], cur_fd);
                         close(cur_fd);
                         break;
                     }
                     else if (count == -1 && errno == EAGAIN) {
-                        cerr << "nothing more to read on: " << cur_fd << "\n";
+                        //cerr << "nothing more to read on: " << cur_fd << "\n";
                         break;
                     }
                     else {
@@ -206,13 +206,13 @@ int main(int argc, char **argv) {
                     }
                 }
                 if (read_finished) {
-                    cerr<<"command: "<<buffers.find(cur_fd)->second<<"\n";
+                    //cerr<<"command: "<<buffers.find(cur_fd)->second<<"\n";
                     vector<execargs_t> prog;
                     if (parse_command(buffers.find(cur_fd)->second, prog) >= 0) {
                         remove_socket(efd, &events[i], cur_fd);
                         start_prog(prog, cur_fd);
                     } else {
-                        cerr << "can't parse program on sock " << cur_fd << "\n";
+                        //cerr << "can't parse program on sock " << cur_fd << "\n";
                         remove_socket(efd, &events[i], cur_fd);
                         close(cur_fd);
                     }
