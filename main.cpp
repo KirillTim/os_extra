@@ -195,7 +195,7 @@ int main(int argc, char **argv) {
                 if (read_finished) {
                     cerr<<"command: "<<buffers.find(cur_fd)->second<<"\n";
                     vector<execargs_t> prog;
-                    if (parse_command(buffers.find(cur_fd)->second, prog) == 1) {
+                    if (parse_command(buffers.find(cur_fd)->second, prog) >= 0) {
                         remove_socket(efd, &events[i], cur_fd);
                         start_prog(prog, cur_fd);
                     } else {
