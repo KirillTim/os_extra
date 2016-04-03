@@ -5,7 +5,9 @@
 
 #include <sys/epoll.h>
 #include <zconf.h>
+#include <vector>
 #include "bufio.h"
+#include "parsers.h"
 
 using namespace std;
 
@@ -56,8 +58,15 @@ int add_client(int efd, int client) {
     return client;
 }
 
+typedef vector<string> program;
+
+
+void run_piped(vector<program>, int fd) {
+
+}
 
 int main(int argc, char **argv) {
+
     if (argc != 2) {
         fprintf(stderr, "Usage: %s [port]\n", argv[0]);
         return 1;
@@ -88,9 +97,8 @@ int main(int argc, char **argv) {
             events_size = events_new_size;
             events = (epoll_event *) calloc(events_size, sizeof(event));
         }
-        int n, i;
-        n = epoll_wait(efd, events, (int) events_size, -1);
-        for (i = 0; i < n; i++) {
+        int n = epoll_wait(efd, events, (int) events_size, -1);
+        for (int i = 0; i < n; i++) {
             int cur_fd = events[i].data.fd;
             if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)
                 || (events[i].events & EPOLLRDHUP)) {
@@ -99,23 +107,36 @@ int main(int argc, char **argv) {
                 continue;
             }
             else if (server == cur_fd) {
-                /* We have a notification on the listening socket, which
-                   means one or more incoming connections. */
                 int res = accept(server, 0, 0);
                 res = add_client(efd, res);
                 if (res < 0)
                     return -res;
+                else
+                    events_new_size ++;
                 continue;
             }
             else {
-                buf_t buf = buffers.find(cur_fd)->second;
-                int count = buf.read_all(cur_fd);
+                auto buf = buffers.find(cur_fd);
+                int count = buf->second.read_all(cur_fd);
                 if (count == 0) {
                     cerr << "on socket " << cur_fd << " close\n";
                     close(cur_fd);
                 }
                 else {
-                    cerr << "on socket " << cur_fd << " read " << count << " bytes\n";
+                    cerr << "on socket " << cur_fd << " read " << count << " bytes, buf: "<<buf->second.data<<"\n";
+                }
+                vector<program> programs;
+                int res = parse_command(buf->second.data, buf->second.size, programs);
+                if (res == 1) { //success
+                    cerr<<"command parsed, remove event\n";
+                    epoll_ctl(efd, EPOLL_CTL_DEL, cur_fd, &events[i]);
+                    events_new_size ++;
+                    run_piped(programs, cur_fd);
+                } else if (res == -1) { //error, close socket and remove
+                    cerr<<"bad string as command, close socket, remove event\n";
+                    close(cur_fd);
+                    epoll_ctl(efd, EPOLL_CTL_DEL, cur_fd, &events[i]);
+                    events_new_size ++;
                 }
             }
         }
