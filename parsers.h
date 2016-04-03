@@ -56,13 +56,28 @@ int parse_command(char* args, size_t len, vector<program>& progs) {
     if (pos == len)
         return 0;
     int st = 0;
+    bool double_quote = false, quote = false;
     for (int i = 0; i < pos; i++) {
-        if (args[i] == '|') {
-            st = i + 1;
+        if (args[i] == '\'') {
+            if (!double_quote)
+                quote = !quote;
+        }
+        if (args[i] == '\"') {
+            if (!quote)
+                double_quote = !double_quote;
+        }
+        if (args[i] == '\\') {
+            i++; //just skip one symbol
+        }
+        if (args[i] == '|' && !(double_quote || quote)
+                || (args[i] != '| ' && i == pos-1)) {
             program cur;
+            if (i == pos - 1)
+                i ++;
             if (parse_args(args+st, (size_t)i-st, cur) <= 0)
                 return -1; //can't parse args
             progs.push_back(cur);
+            st = i + 1;
         }
     }
     return 1;
