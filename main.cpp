@@ -8,6 +8,7 @@
 #include <vector>
 #include "bufio.h"
 #include "parsers.h"
+#include "run_piped.h"
 
 using namespace std;
 
@@ -41,7 +42,7 @@ int make_server(char *port) {
     return sock;
 }
 
-unordered_map<int, buf_t> buffers;
+unordered_map<int, string> buffers;
 
 int add_client(int efd, int client) {
     cerr << "new client: " << client << "\n";
@@ -54,19 +55,23 @@ int add_client(int efd, int client) {
     event.events = EPOLLIN | EPOLLET;
     if (epoll_ctl(efd, EPOLL_CTL_ADD, client, &event) < 0)
         return -13;
-    buffers.insert(make_pair(client, buf_t()));
+    buffers.insert(make_pair(client, ""));
     return client;
 }
 
-typedef vector<string> program;
-
-
-void run_piped(vector<program>, int fd) {
-
+int start_prog(vector<execargs_t> prog, int fd) {
+    int pid = fork();
+    if (pid < 0) {
+        return -1;
+    } else if (pid) {
+        //ignore child, they will finish somehow
+        return 0;
+    } else {
+        exit(run_piped(prog, fd));
+    }
 }
 
 int main(int argc, char **argv) {
-
     if (argc != 2) {
         fprintf(stderr, "Usage: %s [port]\n", argv[0]);
         return 1;
@@ -112,20 +117,55 @@ int main(int argc, char **argv) {
                 if (res < 0)
                     return -res;
                 else
-                    events_new_size ++;
+                    events_new_size++;
                 continue;
             }
             else {
-                auto buf = buffers.find(cur_fd);
-                int count = buf->second.read_all(cur_fd);
-                if (count == 0) {
-                    cerr << "on socket " << cur_fd << " close\n";
-                    close(cur_fd);
+                char buf[1];
+                bool read_finished = false;
+                while (1) {
+                    ssize_t count = read(cur_fd, buf, 1);
+                    if (count == 0) {
+                        cerr << "on socket " << cur_fd << " close\n";
+                        close(cur_fd);
+                        break;
+                    }
+                    else if (count == -1 && errno == EAGAIN) {
+                        cerr << "nothing more to read on: " << cur_fd << "\n";
+                        break;
+                    }
+                    else {
+                        buffers.find(cur_fd)->second += buf[0];
+                        if (buf[0] == '\n') {
+                            read_finished = true;
+                            break;
+                        }
+                    }
                 }
-                else {
+                if (read_finished) {
+                    cerr<<"command: "<<buffers.find(cur_fd)->second<<"\n";
+                    vector<execargs_t> prog;
+                    int res = parse_command((char *) buffers.find(cur_fd)->second.c_str(),
+                                            buffers.find(cur_fd)->second.size(), prog);
+                    if (res == 1) {
+                        epoll_ctl(efd, EPOLL_CTL_DEL, cur_fd, &events[i]);
+                        events_new_size--;
+                        start_prog(prog, cur_fd);
+                    } else {
+                        cerr << "can't parse program on sock " << cur_fd << "\n";
+                        close(cur_fd);
+                        epoll_ctl(efd, EPOLL_CTL_DEL, cur_fd, &events[i]);
+                        events_new_size--;
+                    }
+                }
+
+                /*else {
                     cerr << "on socket " << cur_fd << " read " << count << " bytes, buf: "<<buf->second.data<<"\n";
-                }
-                vector<program> programs;
+                }*/
+                //read one byte at time, find "\n", direct the rest input to run_piped
+                //don't want to deal with rest of the line after '\n'
+
+                /*vector<program> programs;
                 int res = parse_command(buf->second.data, buf->second.size, programs);
                 if (res == 1) { //success
                     cerr<<"command parsed, remove event\n";
@@ -137,7 +177,7 @@ int main(int argc, char **argv) {
                     close(cur_fd);
                     epoll_ctl(efd, EPOLL_CTL_DEL, cur_fd, &events[i]);
                     events_new_size ++;
-                }
+                }*/
             }
         }
     }
