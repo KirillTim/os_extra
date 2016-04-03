@@ -89,4 +89,13 @@ void test_all() {
                        {"./custom", "\"spaces\\\" word\"", "'and \" more'"});
     test_parse_args_fail("sed 'blah");
     test_parse_args_fail("grep bl\"ah");
+    /////////////////////////////////////////////////
+    vector<string> line1 = {"cat", "/proc/cpuinfo"};
+    vector<string> line2 = {"grep", "'model name'"};
+    vector<string> line3 = {"sed", "-re", "'s/.*: (.*)/\\1/'"};
+    vector<string> line4 = {"uniq"};
+    test_parse_command_ok("cat /proc/cpuinfo | grep 'model name' | sed -re 's/.*: (.*)/\\1/' | uniq\n",
+                          {line1, line2, line3, line4});
+    vector<string> line22 = {"grep", "'| | | |'"};
+    test_parse_command_ok("cat /proc/cpuinfo | grep '| | | |'", {line1, line22});
 }
