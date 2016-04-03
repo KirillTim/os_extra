@@ -70,7 +70,7 @@ int parse_command(char* args, size_t len, vector<program>& progs) {
             i++; //just skip one symbol
         }
         if (args[i] == '|' && !(double_quote || quote)
-                || (args[i] != '| ' && i == pos-1)) {
+                || (args[i] != '|' && i == pos-1)) {
             program cur;
             if (i == pos - 1)
                 i ++;
