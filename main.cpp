@@ -68,7 +68,8 @@ int add_client(int efd, int client) {
 }
 
 int start_prog(vector<execargs_t>& prog, int fd) {
-    make_socket_blocking(fd);
+    if (make_socket_blocking(fd) < 0)
+        return -1;
     int pid = fork();
     if (pid < 0) {
         return -1;
@@ -102,17 +103,18 @@ void make_deamon() {
         exit(1);
     }
     if (pid > 0) {
-        FILE* file = fopen ("/tmp/netsh.pid","w");
+        FILE* file = fopen("/tmp/netsh.pid","w");
         if (file != NULL) {
             char str[15];
             sprintf(str, "%d", pid);
-            fputs (str, file);
-            fclose (file);
+            fputs(str, file);
+            fclose(file);
+            exit(0);
         }
         else {//can't create file - kill child
             kill(pid, SIGKILL);
+            exit(1);
         }
-        exit(1);
     }
 
     umask(0);
@@ -137,8 +139,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    make_deamon();
-
     int server = make_server(argv[1]);
     if (server < 0)
         return 2;
@@ -147,6 +147,8 @@ int main(int argc, char **argv) {
     if (efd == -1) {
         return 3;
     }
+
+    make_deamon();
 
     struct epoll_event event;
     struct epoll_event *events;
@@ -171,8 +173,10 @@ int main(int argc, char **argv) {
             if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)
                 || (events[i].events & EPOLLRDHUP)) {
                 //cerr << "error on socket: " << cur_fd << "\n";
-                remove_socket(efd, &events[i], cur_fd);
-                close(cur_fd);
+                if (server != cur_fd) {//server should be alive as long as possible
+                    remove_socket(efd, &events[i], cur_fd);
+                    close(cur_fd);
+                }
                 continue;
             }
             else if (server == cur_fd) {
@@ -185,6 +189,9 @@ int main(int argc, char **argv) {
             else {
                 char buf[1];
                 bool read_finished = false;
+                //read command on byte per read(), while '\n' not found
+                //command length in general is much smaller than command input,
+                //so we won't have perfomance issues, but will simplify code
                 while (1) {
                     ssize_t count = read(cur_fd, buf, 1);
                     if (count == 0) {
@@ -193,8 +200,11 @@ int main(int argc, char **argv) {
                         close(cur_fd);
                         break;
                     }
-                    else if (count == -1 && errno == EAGAIN) {
-                        //cerr << "nothing more to read on: " << cur_fd << "\n";
+                    else if (count == -1) {
+                        if (errno != EAGAIN) {//real error happened, close socket
+                            remove_socket(efd, &events[i], cur_fd);
+                            close(cur_fd);
+                        }
                         break;
                     }
                     else {
